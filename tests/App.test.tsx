@@ -19,6 +19,13 @@ const product: Product = {
   accent: "#527a62",
 };
 
+const lowerPriceProduct: Product = {
+  ...product,
+  id: "pocket-notebook",
+  name: "Pocket Notebook",
+  priceCents: 899,
+};
+
 const listResponse = (items: Product[]): ProductListResponse => ({
   items,
   total: items.length,
@@ -74,6 +81,69 @@ describe("KosKo client", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Catalogue connection failed.");
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("heading", { name: "No products found" })).toBeVisible();
+  });
+
+  it("sorts catalogue results while preserving filters and clears all filters", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input), "http://localhost");
+      if (url.searchParams.get("q") === "missing") return jsonResponse(listResponse([]));
+
+      const items =
+        url.searchParams.get("sort") === "price-asc"
+          ? [lowerPriceProduct, product]
+          : url.searchParams.get("sort") === "price-desc"
+            ? [product, lowerPriceProduct]
+            : [product, lowerPriceProduct];
+      return jsonResponse(listResponse(items));
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(await screen.findByText("2 products, in catalogue order.")).toBeVisible();
+    const sortSelect = screen.getByLabelText("Sort by price");
+    await user.selectOptions(sortSelect, "price-desc");
+    expect(await screen.findByText("2 products, sorted by price high to low.")).toBeVisible();
+    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent))
+      .toEqual([product.name, lowerPriceProduct.name]);
+
+    await user.selectOptions(sortSelect, "price-asc");
+    expect(await screen.findByText("2 products, sorted by price low to high.")).toBeVisible();
+    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent))
+      .toEqual([lowerPriceProduct.name, product.name]);
+    const lowerPriceCard = screen.getByRole("heading", { name: lowerPriceProduct.name }).closest("li")!;
+    await user.click(within(lowerPriceCard).getByRole("button", { name: "Add to cart" }));
+    const cart = screen.getByRole("heading", { name: "Cart" }).closest("aside")!;
+    expect(within(cart).getByText(lowerPriceProduct.name)).toBeVisible();
+
+    await user.selectOptions(screen.getByLabelText("Category"), "outdoors");
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        "/api/products?category=outdoors&sort=price-asc",
+        expect.anything(),
+      ),
+    );
+    await user.type(screen.getByLabelText("Search products"), "lamp");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        "/api/products?q=lamp&category=outdoors&sort=price-asc",
+        expect.anything(),
+      ),
+    );
+
+    await user.clear(screen.getByLabelText("Search products"));
+    await user.type(screen.getByLabelText("Search products"), "missing");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    expect(await screen.findByRole("heading", { name: "No products found" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+
+    expect(await screen.findByText("2 products, in catalogue order.")).toBeVisible();
+    expect(screen.getByLabelText("Search products")).toHaveValue("");
+    expect(screen.getByLabelText("Category")).toHaveValue("");
+    expect(sortSelect).toHaveValue("");
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenLastCalledWith("/api/products", expect.anything()),
+    );
   });
 
   it("loads details and manages cart quantities and totals", async () => {

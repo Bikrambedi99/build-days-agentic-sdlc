@@ -47,6 +47,34 @@ describe("product API", () => {
     });
   });
 
+  it("sorts prices and composes sorting with search and category filters", async () => {
+    const app = createApp({
+      catalogue: new InMemoryProductCatalogue(),
+      logger: silentLogger,
+    });
+
+    const ascending = await request(app)
+      .get("/api/products?category=outdoors&sort=price-asc")
+      .expect(200);
+    expect(ascending.body.query).toMatchObject({
+      category: "outdoors",
+      sort: "price-asc",
+    });
+    expect(ascending.body.items).toMatchObject([
+      { id: "trailmark-bottle" },
+      { id: "tideline-picnic-blanket" },
+    ]);
+
+    const descending = await request(app)
+      .get("/api/products?q=bottle&category=outdoors&sort=price-desc")
+      .expect(200);
+    expect(descending.body).toMatchObject({
+      total: 1,
+      query: { q: "bottle", category: "outdoors", sort: "price-desc" },
+      items: [{ id: "trailmark-bottle" }],
+    });
+  });
+
   it("returns product details and safe not-found responses", async () => {
     const app = createApp({
       catalogue: new InMemoryProductCatalogue(),
@@ -79,6 +107,15 @@ describe("product API", () => {
       fieldErrors: {
         category: expect.any(Array),
       },
+    });
+
+    const invalidSort = await request(app)
+      .get("/api/products?sort=rating")
+      .expect(400);
+    expect(invalidSort.body.error).toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "Check the search filters and try again.",
+      fieldErrors: { sort: expect.any(Array) },
     });
   });
 
