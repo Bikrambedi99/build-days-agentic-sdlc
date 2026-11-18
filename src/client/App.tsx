@@ -5,6 +5,7 @@ import {
   type CartLine,
   type Product,
   type ProductCategory,
+  type ProductSort,
 } from "../shared/contracts.js";
 import { getProduct, listProducts } from "./api.js";
 import {
@@ -40,6 +41,7 @@ export function App() {
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<ProductCategory | "">("");
+  const [sort, setSort] = useState<ProductSort | "">("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
   const [reload, setReload] = useState(0);
@@ -62,6 +64,7 @@ export function App() {
     void listProducts({
       q: query || undefined,
       category: category || undefined,
+      sort: sort || undefined,
     })
       .then((response) => {
         if (active) setProducts(response.items);
@@ -75,7 +78,7 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [query, category, reload]);
+  }, [query, category, sort, reload]);
 
   async function showDetails(product: Product) {
     setSelected(undefined);
@@ -158,7 +161,13 @@ export function App() {
             </div>
             <span aria-live="polite">
               {!loading && !loadError
-                ? `${products.length} ${products.length === 1 ? "product" : "products"}`
+                ? `${products.length} ${products.length === 1 ? "product" : "products"}, ${
+                    sort === "price-asc"
+                      ? "sorted by price low to high"
+                      : sort === "price-desc"
+                        ? "sorted by price high to low"
+                        : "in catalogue order"
+                  }.`
                 : ""}
             </span>
           </div>
@@ -200,6 +209,19 @@ export function App() {
                 ))}
               </select>
             </label>
+            <label>
+              Sort by price
+              <select
+                value={sort}
+                onChange={(event) =>
+                  setSort(event.target.value as ProductSort | "")
+                }
+              >
+                <option value="">Catalogue order</option>
+                <option value="price-asc">Price: low to high</option>
+                <option value="price-desc">Price: high to low</option>
+              </select>
+            </label>
           </form>
 
           <div id={catalogueStatusId} aria-live="polite">
@@ -223,6 +245,7 @@ export function App() {
                     setSearchInput("");
                     setQuery("");
                     setCategory("");
+                    setSort("");
                   }}
                 >
                   Clear filters

@@ -12,15 +12,27 @@ describe("commerce contracts", () => {
     });
   });
 
+  it("leaves price sorting unset by default", () => {
+    expect(productQuerySchema.parse({})).toEqual({ q: "" });
+  });
+
+  it.each(["price-asc", "price-desc"] as const)(
+    "accepts the %s price sort",
+    (sort) => {
+      expect(productQuerySchema.parse({ sort })).toMatchObject({ sort });
+    },
+  );
+
   it("rejects unsupported categories and oversized search", () => {
     const result = productQuerySchema.safeParse({
       q: "x".repeat(fieldLimits.search + 1),
       category: "electronics",
+      sort: "price-random",
     });
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues.map((issue) => issue.path[0])).toEqual(
-        expect.arrayContaining(["q", "category"]),
+        expect.arrayContaining(["q", "category", "sort"]),
       );
     }
   });
